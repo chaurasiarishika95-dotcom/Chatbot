@@ -1,0 +1,13 @@
+{
+  "name": "ask-rishika",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RAG chatbot over Rishika Chaurasia's own documents",
+  "scripts": {
+    "chunks": "node scripts/build-chunks.mjs",
+    "test": "node tests/rag.test.mjs",
+    "eval": "node scripts/eval.mjs"
+  },
+  "engines": { "node": ">=18" }
+}

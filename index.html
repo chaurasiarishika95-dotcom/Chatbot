@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask Rishika</title>
+<meta name="description" content="A RAG chatbot that answers questions about Rishika Chaurasia's work, using only her own documents.">
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e4e2dc;
+    --accent: #1f3864; --accent-soft: #e8edf6; --ok: #1c7c4a; --warn: #a15c07; --bar: #c9d3e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141416; --panel: #1d1d21; --ink: #ececef; --muted: #9a9aa3; --line: #2c2c33;
+      --accent: #9db4e0; --accent-soft: #232a38; --ok: #5cc28c; --warn: #e3a14b; --bar: #34405a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 120px; }
+  header h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+  .how { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .how b { color: var(--ink); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 8px; }
+  .chip { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); }
+  #log { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+  .msg { padding: 12px 14px; border-radius: 12px; max-width: 100%; white-space: pre-wrap; word-wrap: break-word; }
+  .user { align-self: flex-end; background: var(--accent); color: var(--bg); max-width: 85%; }
+  .bot { background: var(--panel); border: 1px solid var(--line); }
+  .bot.refused { border-color: var(--warn); }
+  details { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; white-space: normal; }
+  summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 600; }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); margin: 8px 0; }
+  .stats span b { color: var(--ink); font-weight: 600; }
+  .hit { display: grid; grid-template-columns: 1fr 120px 44px; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+  .hit .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track { height: 6px; background: var(--line); border-radius: 3px; position: relative; overflow: hidden; }
+  .fill { height: 100%; background: var(--bar); border-radius: 3px; }
+  .hit.used .fill { background: var(--accent); }
+  .score { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .note { font-size: 12.5px; color: var(--warn); margin-top: 6px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
+  form { position: fixed; left: 0; right: 0; bottom: 0; background: linear-gradient(transparent, var(--bg) 30%); padding: 18px 16px 16px; }
+  .bar { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.send { padding: 0 18px; border-radius: 10px; border: 0; background: var(--accent); color: var(--bg); font: inherit; font-weight: 600; cursor: pointer; }
+  button.send:disabled { opacity: .5; cursor: default; }
+  .typing { color: var(--muted); font-style: italic; }
+  footer { margin-top: 28px; font-size: 12.5px; color: var(--muted); }
+  footer a { color: var(--accent); }
+  @media (max-width: 520px) { .hit { grid-template-columns: 1fr 70px 40px; } header h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Ask Rishika</h1>
+    <p>Ask about my work, projects, education or skills. I answer only from my own documents.</p>
+    <div class="how"><b>How it works:</b> your question is turned into an embedding, matched against 35 document chunks by cosine similarity, and the best matches are sent to Gemini as context. If nothing matches well enough, the bot says so instead of guessing. Open "How this answer was found" under any answer to see the chunks, scores, tokens, cost and time.</div>
+  </header>
+
+  <div class="chips" id="chips">
+    <button class="chip">What did Rishika build at Cognizant?</button>
+    <button class="chip">How did she test the AI Visa Assistant?</button>
+    <button class="chip">What growth results has she driven?</button>
+    <button class="chip">How does this chatbot avoid made-up answers?</button>
+    <button class="chip">What is her academic background?</button>
+    <button class="chip">What is her favourite cricket team?</button>
+  </div>
+
+  <div id="log" aria-live="polite"></div>
+
+  <footer>Built by Rishika Chaurasia with AI-assisted coding · Gemini embeddings + Gemini 2.5 Flash-Lite ·
+    <a href="https://github.com/chaurasiarishika95-dotcom" target="_blank" rel="noopener">GitHub</a> ·
+    <a href="https://portfolio-rishika-82.vercel.app/" target="_blank" rel="noopener">Portfolio</a></footer>
+</div>
+
+<form id="f">
+  <div class="bar">
+    <input id="q" maxlength="300" placeholder="Ask a question about Rishika's work…" autocomplete="off" aria-label="Your question">
+    <button class="send" id="send" type="submit">Ask</button>
+  </div>
+</form>
+
+<script>
+const log = document.getElementById('log');
+const form = document.getElementById('f');
+const q = document.getElementById('q');
+const send = document.getElementById('send');
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+function addUser(text) { log.appendChild(el('div', 'msg user', text)); }
+
+function traceView(t, refused) {
+  const d = el('details');
+  d.appendChild(el('summary', null, 'How this answer was found'));
+  const stats = el('div', 'stats');
+  const stat = (label, val) => { const s = el('span'); s.append(label + ': '); s.appendChild(el('b', null, val)); stats.appendChild(s); };
+  stat('Model', t.model ? t.model + (t.fallbackUsed ? ' (fallback)' : '') : 'not called');
+  stat('Tokens in / out', `${t.tokens?.input ?? 0} / ${t.tokens?.output ?? 0}`);
+  stat('Est. cost', t.costUsd ? `$${t.costUsd.toFixed(6)}` : '$0');
+  stat('Time', `${t.latencyMs} ms`);
+  if (t.contextTokens) stat('Context', `~${t.contextTokens} tokens`);
+  d.appendChild(stats);
+  (t.retrieved || []).forEach((h, i) => {
+    const row = el('div', 'hit' + (!refused && i < (t.used ?? 0) ? ' used' : ''));
+    row.appendChild(el('div', 'name', `${h.section} · ${h.source}`));
+    const tr = el('div', 'track'); const f = el('div', 'fill'); f.style.width = Math.max(0, Math.min(1, h.score)) * 100 + '%'; tr.appendChild(f); row.appendChild(tr);
+    row.appendChild(el('div', 'score', h.score.toFixed(2)));
+    d.appendChild(row);
+  });
+  const n = el('div', 'stats'); n.textContent = `Minimum similarity to answer: ${t.minScore}`; d.appendChild(n);
+  if (t.reason) d.appendChild(el('div', 'note', t.reason));
+  return d;
+}
+
+function addBot(data) {
+  const m = el('div', 'msg bot' + (data.refused ? ' refused' : ''), data.answer);
+  if (data.refused) m.appendChild(el('span', 'badge', 'guardrail'));
+  if (data.trace) m.appendChild(traceView(data.trace, data.refused));
+  log.appendChild(m);
+  m.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function ask(text) {
+  text = text.trim(); if (!text) return;
+  addUser(text); q.value = ''; send.disabled = true;
+  const wait = el('div', 'msg bot typing', 'Searching my documents…'); log.appendChild(wait);
+  try {
+    const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: text }) });
+    const data = await r.json().catch(() => ({ error: 'Unexpected response from the server.' }));
+    wait.remove();
+    if (!r.ok || data.error) addBot({ answer: data.error || 'Something went wrong.', refused: true });
+    else addBot(data);
+  } catch {
+    wait.remove(); addBot({ answer: 'Could not reach the server. Please try again.', refused: true });
+  } finally { send.disabled = false; q.focus(); }
+}
+
+form.addEventListener('submit', e => { e.preventDefault(); ask(q.value); });
+document.getElementById('chips').addEventListener('click', e => { if (e.target.classList.contains('chip')) ask(e.target.textContent); });
+</script>
+</body>
+</html>
